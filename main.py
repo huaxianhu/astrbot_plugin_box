@@ -1,7 +1,6 @@
 import textwrap
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
-from typing import Optional
 
 import aiohttp
 from aiocqhttp import CQHttp
@@ -76,9 +75,10 @@ class Box(Star):
             None,
         )
         if not target_id:
+            input_id = str(input_id).removeprefix("@")
             target_id = (
-                input_id
-                if input_id and str(input_id) != self_id
+                int(input_id)
+                if input_id.isdigit() and str(input_id) != self_id
                 else event.get_sender_id()
             )
         comp = await self.box(
@@ -95,7 +95,8 @@ class Box(Star):
             and raw.get("post_type") == "notice"
             and raw.get("user_id") != raw.get("self_id")
             and (
-                raw.get("notice_type") == "group_increase" and self.conf["increase_box"]
+                raw.get("notice_type") == "group_increase"
+                and self.conf["increase_box"]
                 or (
                     raw.get("notice_type") == "group_decrease"
                     and raw.get("sub_type") == "leave"
@@ -106,7 +107,10 @@ class Box(Star):
             group_id = raw.get("group_id")
             user_id = raw.get("user_id")
 
-            if self.conf["auto_box_groups"] and str(group_id) not in self.conf["auto_box_groups"]:
+            if (
+                self.conf["auto_box_groups"]
+                and str(group_id) not in self.conf["auto_box_groups"]
+            ):
                 return
 
             comp = await self.box(
@@ -191,8 +195,10 @@ class Box(Star):
             reply.append(f"血型：{self.get_blood_type(int(kBloodType))}")
 
         if (
-            makeFriendCareer := info.get("makeFriendCareer")
-        ) and makeFriendCareer != "0" and d["makeFriendCareer"]:
+            (makeFriendCareer := info.get("makeFriendCareer"))
+            and makeFriendCareer != "0"
+            and d["makeFriendCareer"]
+        ):
             reply.append(f"职业：{self.get_career(int(makeFriendCareer))}")
 
         if (remark := info.get("remark")) and d["remark"]:
@@ -297,8 +303,7 @@ class Box(Star):
 
     @staticmethod
     def get_zodiac(year: int, month: int, day: int) -> str:
-        # 2024年是龙年，以此为基准
-        base_year = 2024
+        """2024 龙年为基准，立春换年（1900-2099 误差<1天）"""
         zodiacs = [
             "龙🐉",
             "蛇🐍",
@@ -313,14 +318,11 @@ class Box(Star):
             "虎🐅",
             "兔🐇",
         ]
-        # 如果输入的日期在2月4日之前，生肖年份应该是上一年
-        if (month == 1) or (month == 2 and day < 4):
-            zodiac_year = year - 1
-        else:
-            zodiac_year = year
-
-        zodiac_index = (zodiac_year - base_year) % 12
-        return zodiacs[zodiac_index]
+        dt = datetime(year, month, day)
+        # 计算当年立春（简化公式）
+        spring = datetime(1900, 1, 31) + timedelta(days=(year - 1900) * 365.2422)
+        ganz_year = year if dt >= spring else year - 1
+        return zodiacs[(ganz_year - 2024) % 12]
 
     @staticmethod
     def get_career(num: int) -> str:
