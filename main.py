@@ -43,10 +43,10 @@ class BoxPlugin(Star):
         # 缓存目录
         self.cache_dir: Path = StarTools.get_data_dir("astrbot_plugin_box")
         # 保护名单
-        self.protect_ids = config.get("protect_ids", [])
-        admins_id = self.context.get_config().get("admins_id", [])
-        if admins_id:
-            self.protect_ids.extend(admins_id)
+        self.protect_ids = list(
+            set(config["protect_ids"])
+            | set(self.context.get_config().get("admins_id", []))
+        )
         # 卡片生成器
         self.renderer = CardMaker()
         # 网络工具
