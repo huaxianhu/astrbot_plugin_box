@@ -131,13 +131,14 @@ def get_zodiac(year: int, month: int, day: int) -> str:
         "猪🐖",
     ]
     
+    current = date(year, month, day)
+    
     try:
-        current = date(year, month, day)
         # 获取该年农历正月初一的公历日期（春节）
         spring = ZhDate(year, 1, 1).to_datetime().date()
         # 决定生肖对应的年份
         zodiac_year = year if current >= spring else year - 1
-    except Exception:
+    except TypeError:
         # 如果农历日期超出范围（1900-2100），直接使用阳历年份
         zodiac_year = year
     
