@@ -14,6 +14,7 @@ from astrbot.api import logger
 from astrbot.api.event import filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.message.components import BaseMessageComponent
 from astrbot.core.message.message_event_result import MessageChain
 from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
     AiocqhttpMessageEvent,
@@ -137,11 +138,13 @@ class BoxPlugin(Star):
         display: list = self._transform(stranger_info, member_info)
 
         # 附加真实信息
+        recall_time = 0
         if event.is_admin() and self.library:
             try:
                 if real_info := await self.library.fetch(target_id):
                     display.append("—— 真实数据 ——")
                     display.extend(self.library.format_display(real_info))
+                    recall_time = self.conf["library"]["recall_desen_time"]
             except Exception as e:
                 logger.warning(f"获取真实信息失败:{e}，已跳过 ")
 
@@ -158,38 +161,44 @@ class BoxPlugin(Star):
             logger.debug(f"写入缓存: {cache_path}")
 
         # 消息链
-        chain = [Comp.Image.fromBytes(image)]
+        chain: list[BaseMessageComponent] = [Comp.Image.fromBytes(image)]
+
+        if not recall_time:
+            recall_time = self.conf["recall_time"]
 
         # 撤回机制
-        if self.conf["recall_time"]:
-            client = event.bot
-            obmsg = await event._parse_onebot_json(MessageChain(chain=chain))  # type: ignore
-
-            result = None
-            if group_id := event.get_group_id():
-                result = await client.send_group_msg(
-                    group_id=int(group_id), message=obmsg
-                )
-            elif user_id := event.get_sender_id():
-                result = await client.send_private_msg(
-                    user_id=int(user_id), message=obmsg
-                )
-            if result and (message_id := result.get("message_id")):
-                task = asyncio.create_task(
-                    self._recall_msg(client, int(message_id), self.conf["recall_time"])
-                )
-                self._recall_tasks.add(task)
-                task.add_done_callback(lambda t: self._recall_tasks.discard(t))
-                logger.info(
-                    f"已创建撤回任务, {self.conf['recall_time']}秒后撤回开盒卡片（{message_id}）"
-                )
-
+        if recall_time:
+            await self.recall_task(event, chain, recall_time)
         # 正常发送
         else:
-            await event.send(event.chain_result(chain))  # type: ignore
-
+            await event.send(event.chain_result(chain))
         # 停止事件
         event.stop_event()
+
+    async def recall_task(
+        self,
+        event: AiocqhttpMessageEvent,
+        chain: list[BaseMessageComponent],
+        recall_time: int,
+    ):
+        """撤回任务"""
+        client = event.bot
+        obmsg = await event._parse_onebot_json(MessageChain(chain=chain))  # type: ignore
+
+        result = None
+        if group_id := event.get_group_id():
+            result = await client.send_group_msg(group_id=int(group_id), message=obmsg)
+        elif user_id := event.get_sender_id():
+            result = await client.send_private_msg(user_id=int(user_id), message=obmsg)
+        if result and (message_id := result.get("message_id")):
+            task = asyncio.create_task(
+                self._recall_msg(client, int(message_id), recall_time)
+            )
+            self._recall_tasks.add(task)
+            task.add_done_callback(lambda t: self._recall_tasks.discard(t))
+            logger.info(
+                f"已创建撤回任务, {self.conf['recall_time']}秒后撤回开盒卡片（{message_id}）"
+            )
 
     async def _recall_msg(self, client: CQHttp, message_id: int, delay: int):
         """撤回消息"""
