@@ -2,7 +2,6 @@ import asyncio
 import shutil
 import textwrap
 import weakref
-from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -22,23 +21,20 @@ from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
 from astrbot.core.star.filter.platform_adapter_type import PlatformAdapterType
 from astrbot.core.star.star_tools import StarTools
 
-from .draw import CardMaker
+from .core.draw import CardMaker
+from .core.field_mapping import FIELD_MAPPING, LABEL_TO_KEY
 
 # library.py 可能缺失，导入时容错并静默降级
 try:
-    from .library import LibraryClient
+    from .core.library import LibraryClient
 except Exception:
     LibraryClient = None
 
-from .utils import (
+from .core.utils import (
     get_ats,
     get_avatar,
-    get_blood_type,
-    get_career,
     get_constellation,
     get_zodiac,
-    parse_home_town,
-    qqLevel_to_icon,
     render_digest,
 )
 
@@ -60,6 +56,8 @@ class BoxPlugin(Star):
         self._recall_tasks: weakref.WeakSet[asyncio.Task] = weakref.WeakSet()
         # Library客户端
         self.library = LibraryClient(config) if LibraryClient else None
+        # 显示选项(控制这需要显示的字段)
+        self.display_options: list[str] = config["display_options"]
 
     @filter.command("盒", alias={"开盒"})
     async def on_command(
@@ -210,132 +208,110 @@ class BoxPlugin(Star):
         except Exception as e:
             logger.error(f"撤回消息失败: {e}")
 
-    def _transform(self, info: dict, info2: dict) -> list:
-        reply = []
-        d = self.conf["display"]
+    def _transform(self, info1: dict, info2: dict) -> list[str]:
+        """根据映射表转换用户信息为显示列表"""
+        reply: list[str] = []
 
-        if user_id := info.get("user_id"):
-            reply.append(f"Q号：{user_id}")
+        # 将 disply_options 中的中文名转换为英文字段名集合
+        enabled_keys = {
+            LABEL_TO_KEY.get(label, label) for label in self.display_options
+        }
 
-        if nickname := info.get("nickname"):
-            reply.append(f"昵称：{nickname}")
+        for field in FIELD_MAPPING:
+            key = field["key"]
+            label = field["label"]
+            source = field.get("source", "info1")
 
-        if (card := info2.get("card")) and d["card"]:
-            reply.append(f"群昵称：{card}")
+            # 检查是否启用显示
+            if key not in enabled_keys:
+                continue
 
-        if (title := info2.get("title")) and d["title"]:
-            reply.append(f"头衔：{title}")
+            # 处理计算字段
+            if source == "computed":
+                computed_lines = self._compute_field(key, label, info1, info2)
+                if computed_lines:
+                    reply.extend(computed_lines)
+                continue
 
-        if d["sex"]:
-            sex = info.get("sex")
-            if sex == "male":
-                reply.append("性别：男")
-            elif sex == "female":
-                reply.append("性别：女")
+            # 获取原始值
+            data = info1 if source == "info1" else info2
+            value = data.get(key)
 
-        if (
-            info.get("birthday_year")
-            and info.get("birthday_month")
-            and info.get("birthday_day")
-        ):
-            if d["birthday"]:
-                reply.append(
-                    f"生日：{info['birthday_year']}-{info['birthday_month']}-{info['birthday_day']}"
-                )
-            if d["constellation"]:
-                reply.append(
-                    f"星座：{get_constellation(int(info['birthday_month']), int(info['birthday_day']))}"
-                )
-            if d["zodiac"]:
-                reply.append(
-                    f"生肖：{get_zodiac(int(info['birthday_year']), int(info['birthday_month']), int(info['birthday_day']))}"
-                )
+            # 跳过空值
+            if not value:
+                continue
 
-        if (age := info.get("age")) and d["age"]:
-            reply.append(f"年龄：{age}岁")
+            # 跳过特定值
+            skip_values = field.get("skip_values", [])
+            if value in skip_values:
+                continue
 
-        if (phoneNum := info.get("phoneNum")) and d["phoneNum"]:
-            if phoneNum != "-":
-                reply.append(f"电话：{phoneNum}")
+            # 应用转换函数
+            transform = field.get("transform")
+            if transform:
+                value = transform(value)
+                if not value:  # 转换后为空则跳过
+                    continue
 
-        if (eMail := info.get("eMail")) and d["eMail"]:
-            if eMail != "-":
-                reply.append(f"邮箱：{eMail}")
+            # 添加后缀
+            suffix = field.get("suffix", "")
 
-        if (postCode := info.get("postCode")) and d["postCode"]:
-            if postCode != "-":
-                reply.append(f"邮编：{postCode}")
-
-        if (homeTown := info.get("homeTown")) and d["homeTown"]:
-            if homeTown != "0-0-0":
-                reply.append(f"来自：{parse_home_town(homeTown)}")
-
-        if d["address"]:
-            country = info.get("country")
-            province = info.get("province")
-            city = info.get("city")
-            if country == "中国" and (province or city):
-                reply.append(f"现居：{province or ''}-{city or ''}")
-            elif country:
-                reply.append(f"现居：{country}")
-
-            if address := info.get("address", False):
-                if address != "-":
-                    reply.append(f"地址：{address}")
-
-        if (kBloodType := info.get("kBloodType")) and d["kBloodType"]:
-            reply.append(f"血型：{get_blood_type(int(kBloodType))}")
-
-        if (
-            (makeFriendCareer := info.get("makeFriendCareer"))
-            and makeFriendCareer != "0"
-            and d["makeFriendCareer"]
-        ):
-            reply.append(f"职业：{get_career(int(makeFriendCareer))}")
-
-        if (remark := info.get("remark")) and d["remark"]:
-            reply.append(f"备注：{remark}")
-
-        if (labels := info.get("labels")) and d["labels"]:
-            reply.append(f"标签：{labels}")
-
-        if info2.get("unfriendly") and d["unfriendly"]:
-            reply.append("不良记录：有")
-
-        if info2.get("is_robot") and d["is_robot"]:
-            reply.append("机器人账号: 是")
-
-        if d["vip"]:
-            if info.get("is_vip"):
-                reply.append("QQVIP：已开")
-
-            if info.get("is_years_vip"):
-                reply.append("年VIP：已开")
-
-            if int(info.get("vip_level", 0)) != 0:
-                reply.append(f"VIP等级：{info['vip_level']}")
-
-        if (level := info2.get("level")) and d["level"]:
-            reply.append(f"群等级：{int(level)}级")
-
-        if (join_time := info2.get("join_time")) and d["join_time"]:
-            reply.append(
-                f"加群时间：{datetime.fromtimestamp(join_time).strftime('%Y-%m-%d')}"
-            )
-
-        if (qqLevel := info.get("qqLevel")) and d["qqLevel"]:
-            reply.append(f"QQ等级：{qqLevel_to_icon(int(qqLevel))}")
-
-        if (reg_time := info.get("reg_time")) and d["reg_time"]:
-            reply.append(
-                f"注册时间：{datetime.fromtimestamp(reg_time).strftime('%Y年')}"
-            )
-
-        if (long_nick := info.get("long_nick")) and d["long_nick"]:
-            lines = textwrap.wrap(text="签名：" + long_nick, width=15)
-            reply.extend(lines)
+            # 处理多行文本（如签名）
+            if field.get("multiline"):
+                wrap_width = field.get("wrap_width", 15)
+                lines = textwrap.wrap(text=f"{label}：{value}", width=wrap_width)
+                reply.extend(lines)
+            else:
+                reply.append(f"{label}：{value}{suffix}")
 
         return reply
+
+    def _compute_field(
+        self, key: str, label: str, info1: dict, info2: dict
+    ) -> list[str]:
+        """处理需要特殊计算的字段，返回行列表"""
+
+        if key == "birthday":
+            year = info1.get("birthday_year")
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
+            if year and month and day:
+                return [f"{label}：{year}-{month}-{day}"]
+            return []
+
+        if key == "constellation":
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
+            if month and day:
+                return [f"{label}：{get_constellation(int(month), int(day))}"]
+            return []
+
+        if key == "zodiac":
+            year = info1.get("birthday_year")
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
+            if year and month and day:
+                return [f"{label}：{get_zodiac(int(year), int(month), int(day))}"]
+            return []
+
+        if key == "address":
+            country = info1.get("country")
+            province = info1.get("province")
+            city = info1.get("city")
+
+            if country == "中国" and (province or city):
+                return [f"{label}：{province or ''}-{city or ''}"]
+            elif country:
+                return [f"{label}：{country}"]
+            return []
+
+        if key == "detail_address":
+            address = info1.get("address")
+            if address and address != "-":
+                return [f"{label}：{address}"]
+            return []
+
+        return []
 
     async def terminate(self):
         """插件卸载时"""
