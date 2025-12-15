@@ -11,45 +11,45 @@ from .utils import (
 )
 
 # 字段映射表：保持列表顺序即为显示顺序
-# source: "info" = stranger_info, "info2" = member_info, "computed" = 计算字段
+# source: "info1" = stranger_info, "info2" = member_info, "computed" = 计算字段
 FIELD_MAPPING: list[dict[str, Any]] = [
-    {"key": "user_id", "label": "QQ号", "source": "info"},
-    {"key": "nickname", "label": "昵称", "source": "info"},
-    {"key": "remark", "label": "备注", "source": "info"},
+    {"key": "user_id", "label": "QQ号", "source": "info1"},
+    {"key": "nickname", "label": "昵称", "source": "info1"},
+    {"key": "remark", "label": "备注", "source": "info1"},
     {"key": "card", "label": "群昵称", "source": "info2"},
     {"key": "title", "label": "群头衔", "source": "info2"},
     {
         "key": "sex",
         "label": "性别",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: {"male": "男", "female": "女"}.get(v),
     },
     {"key": "birthday", "label": "生日", "source": "computed"},
     {"key": "constellation", "label": "星座", "source": "computed"},
     {"key": "zodiac", "label": "生肖", "source": "computed"},
-    {"key": "age", "label": "年龄", "source": "info", "suffix": "岁"},
+    {"key": "age", "label": "年龄", "source": "info1", "suffix": "岁"},
     {
         "key": "kBloodType",
         "label": "血型",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: get_blood_type(int(v)) if v else None,
     },
     {
         "key": "phoneNum",
         "label": "电话",
-        "source": "info",
+        "source": "info1",
         "skip_values": ["-", ""],
     },
     {
         "key": "eMail",
         "label": "邮箱",
-        "source": "info",
+        "source": "info1",
         "skip_values": ["-", ""],
     },
     {
         "key": "homeTown",
         "label": "家乡",
-        "source": "info",
+        "source": "info1",
         "transform": parse_home_town,
         "skip_values": ["0-0-0", ""],
     },
@@ -57,11 +57,11 @@ FIELD_MAPPING: list[dict[str, Any]] = [
     {
         "key": "makeFriendCareer",
         "label": "职业",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: get_career(int(v)) if v and v != "0" else None,
         "skip_values": ["0", ""],
     },
-    {"key": "labels", "label": "个性标签", "source": "info"},
+    {"key": "labels", "label": "个性标签", "source": "info1"},
     {
         "key": "unfriendly",
         "label": "风险账号",
@@ -77,19 +77,19 @@ FIELD_MAPPING: list[dict[str, Any]] = [
     {
         "key": "is_vip",
         "label": "QQVIP",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: "已开" if v else None,
     },
     {
         "key": "is_years_vip",
         "label": "年VIP",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: "已开" if v else None,
     },
     {
         "key": "vip_level",
         "label": "VIP等级",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: str(v) if v and int(v) != 0 else None,
     },
     {
@@ -110,13 +110,13 @@ FIELD_MAPPING: list[dict[str, Any]] = [
     {
         "key": "qqLevel",
         "label": "QQ等级",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: qqLevel_to_icon(int(v)) if v else None,
     },
     {
         "key": "reg_time",
         "label": "注册时间",
-        "source": "info",
+        "source": "info1",
         "transform": lambda v: datetime.fromtimestamp(v).strftime("%Y年")
         if v
         else None,
@@ -124,7 +124,7 @@ FIELD_MAPPING: list[dict[str, Any]] = [
     {
         "key": "long_nick",
         "label": "签名",
-        "source": "info",
+        "source": "info1",
         "multiline": True,
         "wrap_width": 15,
     },

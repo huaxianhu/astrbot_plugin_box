@@ -57,7 +57,7 @@ class BoxPlugin(Star):
         # Library客户端
         self.library = LibraryClient(config) if LibraryClient else None
         # 显示选项(控制这需要显示的字段)
-        self.disply_options: list[str] = config["disply_options"]
+        self.display_options: list[str] = config["display_options"]
 
     @filter.command("盒", alias={"开盒"})
     async def on_command(
@@ -213,7 +213,9 @@ class BoxPlugin(Star):
         reply: list[str] = []
 
         # 将 disply_options 中的中文名转换为英文字段名集合
-        enabled_keys = {LABEL_TO_KEY.get(label, label) for label in self.disply_options}
+        enabled_keys = {
+            LABEL_TO_KEY.get(label, label) for label in self.display_options
+        }
 
         for field in FIELD_MAPPING:
             key = field["key"]
@@ -265,37 +267,37 @@ class BoxPlugin(Star):
         return reply
 
     def _compute_field(
-        self, key: str, label: str, info: dict, info2: dict
+        self, key: str, label: str, info1: dict, info2: dict
     ) -> list[str]:
         """处理需要特殊计算的字段，返回行列表"""
 
         if key == "birthday":
-            year = info.get("birthday_year")
-            month = info.get("birthday_month")
-            day = info.get("birthday_day")
+            year = info1.get("birthday_year")
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
             if year and month and day:
                 return [f"{label}：{year}-{month}-{day}"]
             return []
 
         if key == "constellation":
-            month = info.get("birthday_month")
-            day = info.get("birthday_day")
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
             if month and day:
                 return [f"{label}：{get_constellation(int(month), int(day))}"]
             return []
 
         if key == "zodiac":
-            year = info.get("birthday_year")
-            month = info.get("birthday_month")
-            day = info.get("birthday_day")
+            year = info1.get("birthday_year")
+            month = info1.get("birthday_month")
+            day = info1.get("birthday_day")
             if year and month and day:
                 return [f"{label}：{get_zodiac(int(year), int(month), int(day))}"]
             return []
 
         if key == "address":
-            country = info.get("country")
-            province = info.get("province")
-            city = info.get("city")
+            country = info1.get("country")
+            province = info1.get("province")
+            city = info1.get("city")
 
             if country == "中国" and (province or city):
                 return [f"{label}：{province or ''}-{city or ''}"]
@@ -304,7 +306,7 @@ class BoxPlugin(Star):
             return []
 
         if key == "detail_address":
-            address = info.get("address")
+            address = info1.get("address")
             if address and address != "-":
                 return [f"{label}：{address}"]
             return []
